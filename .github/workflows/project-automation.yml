@@ -1,0 +1,63 @@
+name: Project Board Automation
+
+on:
+  issues:
+    types: [opened, closed, assigned]
+  pull_request:
+    types: [opened, closed, ready_for_review]
+
+jobs:
+  update-project:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Auto-move items
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // This is a simplified version - you'll need to adapt based on your project board setup
+            console.log('Event:', context.eventName);
+            console.log('Action:', context.payload.action);
+            
+            if (context.eventName === 'issues') {
+              const action = context.payload.action;
+              const issue = context.payload.issue;
+              
+              if (action === 'opened') {
+                console.log(`📝 New issue #${issue.number} - would move to Todo`);
+              } else if (action === 'assigned') {
+                console.log(`👤 Issue #${issue.number} assigned - would move to In Progress`);
+              } else if (action === 'closed') {
+                console.log(`✅ Issue #${issue.number} closed - would move to Done`);
+              }
+            }
+            
+            if (context.eventName === 'pull_request') {
+              const action = context.payload.action;
+              const pr = context.payload.pull_request;
+              
+              if (action === 'opened' || action === 'ready_for_review') {
+                console.log(`🔍 PR #${pr.number} ready for review - would move to In Review`);
+              } else if (action === 'closed' && pr.merged) {
+                console.log(`🎉 PR #${pr.number} merged - would move to Done`);
+                
+                // Auto-close linked issues
+                const body = pr.body || '';
+                const issueNumbers = [...body.matchAll(/(?:closes|fixes|resolves)\s+#(\d+)/gi)]
+                  .map(match => parseInt(match[1]));
+                
+                for (const issueNumber of issueNumbers) {
+                  try {
+                    await github.rest.issues.update({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number: issueNumber,
+                      state: 'closed'
+                    });
+                    console.log(`✅ Auto-closed issue #${issueNumber}`);
+                  } catch (error) {
+                    console.log(`❌ Failed to close issue #${issueNumber}`);
+                  }
+                }
+              }
+            }
